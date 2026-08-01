@@ -1,0 +1,38 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lua5.4
+      - name: Run unit tests
+        run: lua5.4 tests/test.lua
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          cache: false
+          install: false
+      - name: Test current release discovery
+        env:
+          MISE_USE_VERSIONS_HOST: 0
+        run: |
+          mise plugins link mysql "$GITHUB_WORKSPACE"
+          latest="$(mise latest mysql)"
+          test "$latest" != "8.0.33"
+          mise ls-remote mysql | grep -Fx "$latest"
+      - name: Test system dependency metadata
+        env:
+          MISE_SYSTEM_DEPS: warn
+          MISE_USE_VERSIONS_HOST: 0
+        run: mise install mysql@latest --dry-run
