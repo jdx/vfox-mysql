@@ -9,6 +9,14 @@ PLUGIN.minRuntimeVersion = "0.3.0"
 PLUGIN.notes = {
   "Uses MySQL's official download page for current releases and dbdeployer's metadata for archives.",
 }
+
+local function command_succeeds(command)
+  local ok = os.execute(command)
+  return ok == true or ok == 0
+end
+
+local apt_libaio = command_succeeds("apt-cache show libaio1t64 >/dev/null 2>&1") and "libaio1t64" or "libaio1"
+
 PLUGIN.systemDependencies = {
   {
     sharedlib = "libncurses.so.6",
@@ -22,7 +30,7 @@ PLUGIN.systemDependencies = {
   {
     command = "test \"$(uname -s)\" != Linux || ldconfig -p 2>/dev/null | grep -Eq 'libaio\\.so\\.1(t64)? '",
     packages = {
-      apt = "libaio1t64",
+      apt = apt_libaio,
       dnf = "libaio",
       pacman = "libaio",
       apk = "libaio",

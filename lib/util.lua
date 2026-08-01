@@ -79,17 +79,26 @@ local function fetch_downloads(series)
     url = url .. "?version=" .. series .. "&os=" .. os
   end
   -- MySQL's download page rejects generic HTTP client user agents.
-  local resp, err = http.get({
+  local ok, resp = pcall(http.get, {
     url = url,
     headers = { ["User-Agent"] = "curl/8.5.0" },
   })
-  if err ~= nil then
-    error("failed to fetch MySQL downloads: " .. err)
+  if ok and resp.status_code == 200 then
+    return resp.body
   end
-  if resp.status_code ~= 200 then
-    error("failed to fetch MySQL downloads: status " .. resp.status_code)
+
+  -- Akamai intermittently rejects mise's native HTTP client while accepting curl.
+  if not ok or resp.status_code == 403 then
+    local handle = io.popen("curl --fail --silent --show-error --location " .. shell_quote(url))
+    local body = handle:read("*a")
+    local curl_ok = handle:close()
+    if curl_ok and body ~= "" then
+      return body
+    end
   end
-  return resp.body
+
+  local reason = ok and ("status " .. resp.status_code) or tostring(resp)
+  error("failed to fetch MySQL downloads: " .. reason)
 end
 
 local function current_versions()
@@ -102,6 +111,14 @@ local function current_versions()
     end
   end
   return versions
+end
+
+local function current_versions_or_empty()
+  local ok, versions = pcall(current_versions)
+  if ok then
+    return versions
+  end
+  return {}
 end
 
 local function current_record(version)
@@ -164,7 +181,7 @@ end
 function util.get_versions()
   local seen = {}
   local versions = {}
-  for _, version in ipairs(current_versions()) do
+  for _, version in ipairs(current_versions_or_empty()) do
     seen[version] = true
     table.insert(versions, { version = version })
   end
