@@ -164,6 +164,14 @@ local function mysql_records()
   return records
 end
 
+local function mysql_records_or_empty()
+  local ok, records = pcall(mysql_records)
+  if ok then
+    return records
+  end
+  return {}
+end
+
 local function link_libaio_t64(root)
   if target_os() ~= "Linux" or exists(root .. "/lib/private/libaio.so.1") then
     return
@@ -185,7 +193,7 @@ function util.get_versions()
     seen[version] = true
     table.insert(versions, { version = version })
   end
-  for _, record in ipairs(mysql_records()) do
+  for _, record in ipairs(mysql_records_or_empty()) do
     if not seen[record.version] then
       seen[record.version] = true
       table.insert(versions, { version = record.version })
@@ -197,7 +205,7 @@ end
 
 function util.record_for_version(version)
   local records = {}
-  for _, record in ipairs(mysql_records()) do
+  for _, record in ipairs(mysql_records_or_empty()) do
     if record.version == version then
       table.insert(records, record)
     end

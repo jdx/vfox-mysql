@@ -24,7 +24,6 @@ PLUGIN.systemDependencies = {
       apt = "libncurses6",
       dnf = "ncurses-libs",
       pacman = "ncurses",
-      apk = "ncurses-libs",
     },
   },
   {
@@ -33,7 +32,6 @@ PLUGIN.systemDependencies = {
       apt = apt_libaio,
       dnf = "libaio",
       pacman = "libaio",
-      apk = "libaio",
     },
   },
   {
@@ -42,7 +40,6 @@ PLUGIN.systemDependencies = {
       apt = "libnuma1",
       dnf = "numactl-libs",
       pacman = "numactl",
-      apk = "numactl",
     },
   },
 }
