@@ -97,6 +97,11 @@ local function apt_libaio_package(has_t64)
   end
   dofile("metadata.lua")
   os.execute = real_execute
+  assert(#PLUGIN.systemDependencies == 3)
+  assert(PLUGIN.systemDependencies[1].sharedlib == "libncurses.so.6")
+  assert(PLUGIN.systemDependencies[1].packages.apt == "libncurses6")
+  assert(PLUGIN.systemDependencies[3].sharedlib == "libnuma.so.1")
+  assert(PLUGIN.systemDependencies[3].packages.apt == "libnuma1")
   return PLUGIN.systemDependencies[2].packages.apt
 end
 
