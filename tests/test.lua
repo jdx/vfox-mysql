@@ -103,28 +103,40 @@ util = require("util")
 current = util.record_for_version("26.7.0")
 assert(current.filename == "mysql-26.7.0-macos15-arm64.tar.gz")
 
-local real_execute = os.execute
-local function apt_libaio_package(has_t64)
-  os.execute = function(command)
-    if command:find("apt%-cache show libaio1t64") then
-      return has_t64 and true or nil
-    end
-    return real_execute(command)
-  end
-  dofile("metadata.lua")
-  os.execute = real_execute
-  assert(#PLUGIN.systemDependencies == 3)
-  assert(PLUGIN.systemDependencies[1].sharedlib == "libncurses.so.6")
-  assert(PLUGIN.systemDependencies[1].packages.apt == "libncurses6")
-  assert(PLUGIN.systemDependencies[1].packages.apk == nil)
-  assert(PLUGIN.systemDependencies[2].packages.apk == nil)
-  assert(PLUGIN.systemDependencies[3].sharedlib == "libnuma.so.1")
-  assert(PLUGIN.systemDependencies[3].packages.apt == "libnuma1")
-  assert(PLUGIN.systemDependencies[3].packages.apk == nil)
-  return PLUGIN.systemDependencies[2].packages.apt
+-- metadata.lua runs on every plugin metadata load, so it must stay pure data.
+-- Anything that shells out or reads host state fails the suite here.
+local real_execute, real_popen, real_open = os.execute, io.popen, io.open
+os.execute = function(command)
+  error("metadata.lua must not spawn processes: " .. tostring(command))
 end
+io.popen = function(command)
+  error("metadata.lua must not spawn processes: " .. tostring(command))
+end
+io.open = function(path, ...)
+  if path == "/etc/os-release" then
+    error("metadata.lua must not read host state: " .. path)
+  end
+  return real_open(path, ...)
+end
+dofile("metadata.lua")
+os.execute, io.popen, io.open = real_execute, real_popen, real_open
 
-assert(apt_libaio_package(true) == "libaio1t64")
-assert(apt_libaio_package(false) == "libaio1")
+assert(#PLUGIN.systemDependencies == 3)
+assert(PLUGIN.systemDependencies[1].sharedlib == "libncurses.so.6")
+assert(PLUGIN.systemDependencies[1].packages.apt == "libncurses6")
+assert(PLUGIN.systemDependencies[1].packages.apk == nil)
+assert(PLUGIN.systemDependencies[3].sharedlib == "libnuma.so.1")
+assert(PLUGIN.systemDependencies[3].packages.apt == "libnuma1")
+assert(PLUGIN.systemDependencies[3].packages.apk == nil)
+
+-- libaio is the one package the time_t transition renamed: mise asks apt which
+-- candidate exists, newest name first. libncurses6/libnuma1 were not renamed,
+-- so they stay single names.
+local libaio_apt = PLUGIN.systemDependencies[2].packages.apt
+assert(type(libaio_apt) == "table", "libaio apt hint should list candidates")
+assert(libaio_apt[1] == "libaio1t64")
+assert(libaio_apt[2] == "libaio1")
+assert(#libaio_apt == 2)
+assert(PLUGIN.systemDependencies[2].packages.apk == nil)
 
 print("ok")
