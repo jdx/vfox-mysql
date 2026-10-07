@@ -64,8 +64,23 @@ end
 -- http.get can yield while waiting on the network, and Lua 5.1 cannot yield
 -- through pcall, so requests use http.try_get, which reports failures as a
 -- second return value instead of raising.
+-- Official vfox only has http.get (which also returns resp, err); mise adds try_get.
+local function http_get(request)
+  return (http.try_get or http.get)(request)
+end
+
+local function normalize_arch(arch)
+  if arch == "arm64" or arch == "aarch64" then
+    return "arm64"
+  end
+  if arch == "amd64" or arch == "x86_64" then
+    return "amd64"
+  end
+  return arch
+end
+
 local function fetch_records()
-  local resp, err = http.try_get({ url = metadata_url })
+  local resp, err = http_get({ url = metadata_url })
   if resp == nil then
     return nil, "failed to fetch MySQL tarball metadata: " .. tostring(err)
   end
@@ -86,7 +101,7 @@ local function fetch_downloads(series)
     url = url .. "?version=" .. series .. "&os=" .. os
   end
   -- MySQL's download page rejects generic HTTP client user agents.
-  local resp, err = http.try_get({
+  local resp, err = http_get({
     url = url,
     headers = { ["User-Agent"] = "curl/8.5.0" },
   })
@@ -218,7 +233,7 @@ function util.record_for_version(version)
   if #records > 0 then
     local arch = target_arch()
     for _, record in ipairs(records) do
-      if record.arch == arch then
+      if normalize_arch(record.arch) == arch then
         return record
       end
     end
