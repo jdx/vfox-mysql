@@ -29,7 +29,11 @@ local archive_records = {
 
 package.preload.http = function()
   return {
-    get = function(request)
+    -- http.get yields on the network and cannot run under pcall in Lua 5.1.
+    get = function()
+      error("http.get must not be used; use http.try_get")
+    end,
+    try_get = function(request)
       if request.url:find("datacharmer", 1, true) then
         if archive_unavailable then
           return { status_code = 503, body = "unavailable" }
@@ -95,6 +99,21 @@ assert(not found["8.0.33"], "unavailable archives should be omitted")
 current = util.record_for_version("26.7.0")
 assert(current.filename == "mysql-26.7.0-linux-glibc2.28-x86_64.tar.xz")
 archive_unavailable = false
+
+-- An amd64-only archive must not be selected on arm64.
+ARCH_TYPE = "arm64"
+package.loaded.util = nil
+util = require("util")
+local ok = pcall(util.record_for_version, "8.0.33")
+assert(not ok, "amd64 archive must not be used on arm64")
+
+-- Windows is unsupported and must fail before any download is chosen.
+OS_TYPE = "windows"
+ARCH_TYPE = "amd64"
+package.loaded.util = nil
+util = require("util")
+ok = pcall(util.record_for_version, "26.7.0")
+assert(not ok, "windows should be rejected")
 
 OS_TYPE = "darwin"
 ARCH_TYPE = "arm64"
