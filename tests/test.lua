@@ -1,3 +1,4 @@
+local fail_all, fail_archives, fail_current = false, false, false
 local current_unavailable = false
 local archive_unavailable = false
 
@@ -29,7 +30,17 @@ local archive_records = {
 
 package.preload.http = function()
   return {
-    get = function(request)
+    -- http.get yields on the network and cannot run under pcall in Lua 5.1.
+    get = function()
+      error("http.get must not be used; use http.try_get")
+    end,
+    try_get = function(request)
+      if fail_all or (fail_archives and request.url:find("datacharmer", 1, true)) then
+        return nil, "network error"
+      end
+      if fail_current and not request.url:find("datacharmer", 1, true) then
+        return nil, "network error"
+      end
       if request.url:find("datacharmer", 1, true) then
         if archive_unavailable then
           return { status_code = 503, body = "unavailable" }
@@ -95,6 +106,67 @@ assert(not found["8.0.33"], "unavailable archives should be omitted")
 current = util.record_for_version("26.7.0")
 assert(current.filename == "mysql-26.7.0-linux-glibc2.28-x86_64.tar.xz")
 archive_unavailable = false
+
+-- Transport errors (nil, err) from one source must not hide the other.
+fail_archives = true
+versions = util.get_versions()
+found = {}
+for _, version in ipairs(versions) do
+  found[version.version] = true
+end
+assert(found["26.7.0"] and not found["8.0.33"], "current releases survive archive transport error")
+fail_archives = false
+fail_current = true
+versions = util.get_versions()
+assert(#versions == 1 and versions[1].version == "8.0.33", "archives survive current transport error")
+fail_current = false
+fail_all = true
+assert(#util.get_versions() == 0, "both sources failing yields an empty list")
+fail_all = false
+
+-- dbdeployer labels ARM Linux archives "aarch64".
+table.insert(archive_records, {
+  flavor = "mysql",
+  minimal = false,
+  OS = "Linux",
+  arch = "aarch64",
+  version = "8.0.34",
+  url = "https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.34-linux-arm.tar.gz",
+})
+ARCH_TYPE = "arm64"
+package.loaded.util = nil
+util = require("util")
+assert(util.record_for_version("8.0.34").arch == "aarch64", "aarch64 archive should match arm64")
+ARCH_TYPE = "amd64"
+
+-- Official vfox has no http.try_get; http.get returns resp, err there.
+local real_http = package.preload.http
+package.preload.http = function()
+  local h = real_http()
+  h.get, h.try_get = h.try_get, nil
+  return h
+end
+package.loaded.http, package.loaded.util = nil, nil
+util = require("util")
+assert(util.record_for_version("26.7.0").filename:find("x86_64", 1, true), "http.get fallback")
+package.preload.http = real_http
+package.loaded.http, package.loaded.util = nil, nil
+util = require("util")
+
+-- An amd64-only archive must not be selected on arm64.
+ARCH_TYPE = "arm64"
+package.loaded.util = nil
+util = require("util")
+local ok = pcall(util.record_for_version, "8.0.33")
+assert(not ok, "amd64 archive must not be used on arm64")
+
+-- Windows is unsupported and must fail before any download is chosen.
+OS_TYPE = "windows"
+ARCH_TYPE = "amd64"
+package.loaded.util = nil
+util = require("util")
+ok = pcall(util.record_for_version, "26.7.0")
+assert(not ok, "windows should be rejected")
 
 OS_TYPE = "darwin"
 ARCH_TYPE = "arm64"
